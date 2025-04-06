@@ -10,33 +10,81 @@ def create_shortcut(target_path, shortcut_name):
     """Create desktop shortcut based on operating system"""
     desktop = os.path.join(os.path.expanduser("~"), "Desktop")
     
-    if platform.system() == "Windows": # for windows
-        import winshell
-        from win32com.client import Dispatch
+    if platform.system() == "Windows":
+        try:
+            import winshell
+            from win32com.client import Dispatch
+            
+            shortcut_path = os.path.join(desktop, f"{shortcut_name}.lnk")
+            shell = Dispatch('WScript.Shell')
+            shortcut = shell.CreateShortCut(shortcut_path)
+            shortcut.Targetpath = target_path
+            shortcut.WorkingDirectory = os.path.dirname(target_path)
+            shortcut.IconLocation = target_path
+            shortcut.save()
+            
+            print(f"Created shortcut at: {shortcut_path}")
+        except Exception as e:
+            print(f"Warning: Could not create desktop shortcut: {e}")
+            print(f"To run the application, use: python {target_path}")
+            
+            # Try creating shortcut in the current directory instead
+            try:
+                local_shortcut_path = os.path.join(os.path.dirname(target_path), f"{shortcut_name}.lnk")
+                shell = Dispatch('WScript.Shell')
+                shortcut = shell.CreateShortCut(local_shortcut_path)
+                shortcut.Targetpath = target_path
+                shortcut.WorkingDirectory = os.path.dirname(target_path)
+                shortcut.IconLocation = target_path
+                shortcut.save()
+                
+                print(f"Created shortcut in the application folder instead: {local_shortcut_path}")
+            except Exception as e2:
+                print(f"Could not create local shortcut either: {e2}")
         
-        shortcut_path = os.path.join(desktop, f"{shortcut_name}.lnk")
-        shell = Dispatch('WScript.Shell')
-        shortcut = shell.CreateShortCut(shortcut_path)
-        shortcut.Targetpath = target_path
-        shortcut.WorkingDirectory = os.path.dirname(target_path)
-        shortcut.IconLocation = target_path
-        shortcut.save()
+    elif platform.system() == "Darwin":  # macOS
+        try:
+            shortcut_path = os.path.join(desktop, f"{shortcut_name}.command")
+            with open(shortcut_path, 'w') as f:
+                f.write(f'#!/bin/bash\ncd "$(dirname "$0")"\npython3 "{target_path}"\n')
+            os.chmod(shortcut_path, 0o755)
+            print(f"Created shortcut at: {shortcut_path}")
+        except Exception as e:
+            print(f"Warning: Could not create desktop shortcut: {e}")
+            print(f"To run the application, use: python3 {target_path}")
+            
+            # Try creating shortcut in the current directory instead
+            try:
+                local_shortcut_path = os.path.join(os.path.dirname(target_path), f"{shortcut_name}.command")
+                with open(local_shortcut_path, 'w') as f:
+                    f.write(f'#!/bin/bash\ncd "$(dirname "$0")"\npython3 "{target_path}"\n')
+                os.chmod(local_shortcut_path, 0o755)
+                print(f"Created shortcut in the application folder instead: {local_shortcut_path}")
+            except Exception as e2:
+                print(f"Could not create local shortcut either: {e2}")
         
-    elif platform.system() == "Darwin":  # the install for macOS
-        shortcut_path = os.path.join(desktop, f"{shortcut_name}.command")
-        with open(shortcut_path, 'w') as f:
-            f.write(f'#!/bin/bash\ncd "$(dirname "$0")"\npython3 "{target_path}"\n')
-        os.chmod(shortcut_path, 0o755)
-        
-    elif platform.system() == "Linux": # for linux
-        shortcut_path = os.path.join(desktop, f"{shortcut_name}.desktop")
-        with open(shortcut_path, 'w') as f:
-            f.write(f"[Desktop Entry]\nType=Application\nName={shortcut_name}\nExec=python3 {target_path}\nTerminal=false\n")
-        os.chmod(shortcut_path, 0o755)
-    
-    print(f"Created shortcut at: {shortcut_path}")
+    elif platform.system() == "Linux":
+        try:
+            shortcut_path = os.path.join(desktop, f"{shortcut_name}.desktop")
+            with open(shortcut_path, 'w') as f:
+                f.write(f"[Desktop Entry]\nType=Application\nName={shortcut_name}\nExec=python3 {target_path}\nTerminal=false\n")
+            os.chmod(shortcut_path, 0o755)
+            print(f"Created shortcut at: {shortcut_path}")
+        except Exception as e:
+            print(f"Warning: Could not create desktop shortcut: {e}")
+            print(f"To run the application, use: python3 {target_path}")
+            
+            # Try creating shortcut in the current directory instead
+            try:
+                local_shortcut_path = os.path.join(os.path.dirname(target_path), f"{shortcut_name}.desktop")
+                with open(local_shortcut_path, 'w') as f:
+                    f.write(f"[Desktop Entry]\nType=Application\nName={shortcut_name}\nExec=python3 {target_path}\nTerminal=false\n")
+                os.chmod(local_shortcut_path, 0o755)
+                print(f"Created shortcut in the application folder instead: {local_shortcut_path}")
+            except Exception as e2:
+                print(f"Could not create local shortcut either: {e2}")
 
-def install_dependencies(): # all dependencies
+def install_dependencies():
     """Install required Python packages"""
     required_packages = [
         "pandas",
@@ -45,7 +93,7 @@ def install_dependencies(): # all dependencies
         "tkcalendar"
     ]
     
-    if platform.system() == "Windows": # windows specific
+    if platform.system() == "Windows":
         required_packages.append("pywin32")
         required_packages.append("winshell")
     
@@ -61,11 +109,11 @@ def create_folder_structure():
     """Create necessary folders for the application"""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # create data directory
+    # Create data directory
     data_dir = os.path.join(base_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
     
-    # create workplace directories
+    # Create workplace directories
     workplaces = [
         "IT Service Center",
         "Esports Lounge (Shultz)",
@@ -80,7 +128,7 @@ def create_folder_structure():
         os.makedirs(os.path.join(workplace_dir, "workers"), exist_ok=True)
         os.makedirs(os.path.join(workplace_dir, "schedules"), exist_ok=True)
         
-        # create initial config file
+        # Create initial config file
         config = {
             "name": workplace,
             "hours_of_operation": {}
@@ -132,11 +180,11 @@ def create_folder_structure():
         with open(os.path.join(workplace_dir, "config.json"), 'w') as f:
             json.dump(config, f, indent=4)
         
-        # create empty workers.json file
+        # Create empty workers.json file
         with open(os.path.join(workplace_dir, "workers", "workers.json"), 'w') as f:
             json.dump([], f, indent=4)
     
-    # create user settings file
+    # Create user settings file
     user_settings = {
         "email": "admin@example.com"
     }
@@ -155,7 +203,7 @@ def create_template_excel():
         templates_dir = os.path.join(base_dir, "templates")
         os.makedirs(templates_dir, exist_ok=True)
         
-        # create worker template
+        # Create worker template
         columns = [
             "First Name", "Last Name", 
             "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
@@ -165,7 +213,7 @@ def create_template_excel():
         
         df = pd.DataFrame(columns=columns)
         
-        # add example data
+        # Add example data
         example_data = {
             "First Name": ["John", "Jane"],
             "Last Name": ["Doe", "Smith"],
@@ -184,7 +232,7 @@ def create_template_excel():
         
         example_df = pd.DataFrame(example_data)
         
-        # save template
+        # Save template
         template_path = os.path.join(templates_dir, "worker_template.xlsx")
         example_df.to_excel(template_path, index=False)
         
@@ -196,34 +244,52 @@ def copy_app_files():
     """Copy application files to the installation directory"""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # create app files if they don't exist
+    # Create app files if they don't exist
     app_files = ["main.py", "scheduler.py", "utils.py"]
     
     for file in app_files:
         if not os.path.exists(os.path.join(base_dir, file)):
             print(f"Warning: {file} not found in the installation directory.")
 
+def create_batch_file(script_path, shortcut_name):
+    """Create a batch file to run the application"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    batch_path = os.path.join(base_dir, f"{shortcut_name}.bat")
+    
+    try:
+        with open(batch_path, 'w') as f:
+            f.write(f'@echo off\npython "{script_path}"\npause\n')
+        
+        print(f"Created batch file at: {batch_path}")
+        return True
+    except Exception as e:
+        print(f"Warning: Could not create batch file: {e}")
+        return False
+
 def main():
     print("Starting installation of Workplace Scheduler App...")
     
-    # install dependencies
+    # Install dependencies
     install_dependencies()
     
-    # create folder structure
+    # Create folder structure
     create_folder_structure()
     
-    # create template Excel files
+    # Create template Excel files
     create_template_excel()
     
-    # copy app files
+    # Copy app files
     copy_app_files()
     
-    # create desktop shortcut
+    # Create desktop shortcut
     script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
     create_shortcut(script_path, "Workplace Scheduler")
     
+    # Create batch file as a backup method to start the app
+    create_batch_file(script_path, "Workplace Scheduler")
+    
     print("\nInstallation completed successfully!")
-    print("You can now run the application by clicking the desktop shortcut or by running main.py")
+    print("You can now run the application by clicking the desktop shortcut, using the batch file, or by running main.py")
 
 if __name__ == "__main__":
     main()
