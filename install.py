@@ -4,85 +4,73 @@ import subprocess
 import json
 import platform
 import shutil
+import ctypes
 from pathlib import Path
 
-def create_shortcut(target_path, shortcut_name):
-    """Create desktop shortcut based on operating system"""
-    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+def is_admin():
+    """Check if the script is running with admin privileges"""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def run_as_admin():
+    """Re-run the script with admin privileges"""
+    ctypes.windll.shell32.ShellExecuteW(
+        None, "runas", sys.executable, " ".join(sys.argv), None, 1
+    )
+
+def create_windows_shortcut(target_path, shortcut_name):
+    """Create Windows desktop shortcut"""
+    try:
+        import winshell
+        from win32com.client import Dispatch
+        
+        # Get desktop path
+        desktop = winshell.desktop()
+        
+        # Create shortcut
+        shortcut_path = os.path.join(desktop, f"{shortcut_name}.lnk")
+        shell = Dispatch('WScript.Shell')
+        shortcut = shell.CreateShortCut(shortcut_path)
+        shortcut.Targetpath = target_path
+        shortcut.WorkingDirectory = os.path.dirname(target_path)
+        shortcut.IconLocation = sys.executable
+        shortcut.save()
+        
+        print(f"Created desktop shortcut at: {shortcut_path}")
+        return True
+    except Exception as e:
+        print(f"Error creating desktop shortcut: {e}")
+        return False
+
+def create_windows_batch_file(script_path, name):
+    """Create a batch file to run the application"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    batch_path = os.path.join(base_dir, f"{name}.bat")
     
-    if platform.system() == "Windows":
-        try:
-            import winshell
-            from win32com.client import Dispatch
-            
-            shortcut_path = os.path.join(desktop, f"{shortcut_name}.lnk")
-            shell = Dispatch('WScript.Shell')
-            shortcut = shell.CreateShortCut(shortcut_path)
-            shortcut.Targetpath = target_path
-            shortcut.WorkingDirectory = os.path.dirname(target_path)
-            shortcut.IconLocation = target_path
-            shortcut.save()
-            
-            print(f"Created shortcut at: {shortcut_path}")
-        except Exception as e:
-            print(f"Warning: Could not create desktop shortcut: {e}")
-            print(f"To run the application, use: python {target_path}")
-            
-            # Try creating shortcut in the current directory instead
-            try:
-                local_shortcut_path = os.path.join(os.path.dirname(target_path), f"{shortcut_name}.lnk")
-                shell = Dispatch('WScript.Shell')
-                shortcut = shell.CreateShortCut(local_shortcut_path)
-                shortcut.Targetpath = target_path
-                shortcut.WorkingDirectory = os.path.dirname(target_path)
-                shortcut.IconLocation = target_path
-                shortcut.save()
-                
-                print(f"Created shortcut in the application folder instead: {local_shortcut_path}")
-            except Exception as e2:
-                print(f"Could not create local shortcut either: {e2}")
+    try:
+        with open(batch_path, 'w') as f:
+            f.write(f'@echo off\n')
+            f.write(f'echo Starting Workplace Scheduler...\n')
+            f.write(f'python "{script_path}"\n')
+            f.write(f'if %ERRORLEVEL% neq 0 pause\n')
         
-    elif platform.system() == "Darwin":  # macOS
-        try:
-            shortcut_path = os.path.join(desktop, f"{shortcut_name}.command")
-            with open(shortcut_path, 'w') as f:
-                f.write(f'#!/bin/bash\ncd "$(dirname "$0")"\npython3 "{target_path}"\n')
-            os.chmod(shortcut_path, 0o755)
-            print(f"Created shortcut at: {shortcut_path}")
-        except Exception as e:
-            print(f"Warning: Could not create desktop shortcut: {e}")
-            print(f"To run the application, use: python3 {target_path}")
-            
-            # Try creating shortcut in the current directory instead
-            try:
-                local_shortcut_path = os.path.join(os.path.dirname(target_path), f"{shortcut_name}.command")
-                with open(local_shortcut_path, 'w') as f:
-                    f.write(f'#!/bin/bash\ncd "$(dirname "$0")"\npython3 "{target_path}"\n')
-                os.chmod(local_shortcut_path, 0o755)
-                print(f"Created shortcut in the application folder instead: {local_shortcut_path}")
-            except Exception as e2:
-                print(f"Could not create local shortcut either: {e2}")
+        # Also create a desktop batch file
+        desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+        desktop_batch = os.path.join(desktop, f"{name}.bat")
         
-    elif platform.system() == "Linux":
         try:
-            shortcut_path = os.path.join(desktop, f"{shortcut_name}.desktop")
-            with open(shortcut_path, 'w') as f:
-                f.write(f"[Desktop Entry]\nType=Application\nName={shortcut_name}\nExec=python3 {target_path}\nTerminal=false\n")
-            os.chmod(shortcut_path, 0o755)
-            print(f"Created shortcut at: {shortcut_path}")
+            shutil.copy(batch_path, desktop_batch)
+            print(f"Created desktop batch file at: {desktop_batch}")
         except Exception as e:
-            print(f"Warning: Could not create desktop shortcut: {e}")
-            print(f"To run the application, use: python3 {target_path}")
-            
-            # Try creating shortcut in the current directory instead
-            try:
-                local_shortcut_path = os.path.join(os.path.dirname(target_path), f"{shortcut_name}.desktop")
-                with open(local_shortcut_path, 'w') as f:
-                    f.write(f"[Desktop Entry]\nType=Application\nName={shortcut_name}\nExec=python3 {target_path}\nTerminal=false\n")
-                os.chmod(local_shortcut_path, 0o755)
-                print(f"Created shortcut in the application folder instead: {local_shortcut_path}")
-            except Exception as e2:
-                print(f"Could not create local shortcut either: {e2}")
+            print(f"Could not create desktop batch file: {e}")
+        
+        print(f"Created application batch file at: {batch_path}")
+        return True
+    except Exception as e:
+        print(f"Warning: Could not create batch file: {e}")
+        return False
 
 def install_dependencies():
     """Install required Python packages"""
@@ -90,12 +78,10 @@ def install_dependencies():
         "pandas",
         "openpyxl",
         "pillow",
-        "tkcalendar"
+        "tkcalendar",
+        "pywin32",
+        "winshell"
     ]
-    
-    if platform.system() == "Windows":
-        required_packages.append("pywin32")
-        required_packages.append("winshell")
     
     print("Installing required packages...")
     for package in required_packages:
@@ -251,22 +237,12 @@ def copy_app_files():
         if not os.path.exists(os.path.join(base_dir, file)):
             print(f"Warning: {file} not found in the installation directory.")
 
-def create_batch_file(script_path, shortcut_name):
-    """Create a batch file to run the application"""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    batch_path = os.path.join(base_dir, f"{shortcut_name}.bat")
-    
-    try:
-        with open(batch_path, 'w') as f:
-            f.write(f'@echo off\npython "{script_path}"\npause\n')
-        
-        print(f"Created batch file at: {batch_path}")
-        return True
-    except Exception as e:
-        print(f"Warning: Could not create batch file: {e}")
-        return False
-
 def main():
+    # Check if running on Windows
+    if platform.system() != "Windows":
+        print("This installer is designed for Windows only.")
+        sys.exit(1)
+    
     print("Starting installation of Workplace Scheduler App...")
     
     # Install dependencies
@@ -281,15 +257,32 @@ def main():
     # Copy app files
     copy_app_files()
     
-    # Create desktop shortcut
+    # Create desktop shortcut and batch file
     script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
-    create_shortcut(script_path, "Workplace Scheduler")
     
-    # Create batch file as a backup method to start the app
-    create_batch_file(script_path, "Workplace Scheduler")
+    # Try to create shortcut
+    shortcut_created = create_windows_shortcut(script_path, "Workplace Scheduler")
+    
+    # Always create batch file as a backup
+    create_windows_batch_file(script_path, "Workplace Scheduler")
+    
+    # If shortcut creation failed and not running as admin, offer to run as admin
+    if not shortcut_created and not is_admin():
+        print("\nCreating desktop shortcut failed. This might be due to permission restrictions.")
+        response = input("Would you like to run the installer with administrator privileges? (y/n): ")
+        
+        if response.lower() in ['y', 'yes']:
+            print("Restarting with admin privileges...")
+            run_as_admin()
+            sys.exit(0)
     
     print("\nInstallation completed successfully!")
-    print("You can now run the application by clicking the desktop shortcut, using the batch file, or by running main.py")
+    print("You can now run the application using one of these methods:")
+    print("1. Desktop shortcut (if created successfully)")
+    print("2. Desktop batch file 'Workplace Scheduler.bat'")
+    print("3. Application folder batch file 'Workplace Scheduler.bat'")
+    print("4. Run 'python main.py' from the command line in the application folder")
 
 if __name__ == "__main__":
     main()
+    
